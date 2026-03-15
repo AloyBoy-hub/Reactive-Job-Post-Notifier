@@ -1,0 +1,34 @@
+name: Hourly job scrape
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+
+jobs:
+  trigger-scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger scrape endpoint
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "${APP_URL}" ] || [ -z "${CRON_SECRET}" ]; then
+            echo "APP_URL and CRON_SECRET are required in repository secrets."
+            exit 1
+          fi
+
+          echo "Triggering scrape on ${APP_URL}..."
+          status_code=$(curl -sS -o /tmp/scrape-response.json -w "%{http_code}" \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/scrape")
+
+          if [ "${status_code}" -ge 400 ]; then
+            echo "Scrape request failed with status ${status_code}"
+            cat /tmp/scrape-response.json
+            exit 1
+          fi
+
+          echo "Scrape triggered successfully (HTTP ${status_code})"

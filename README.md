@@ -6,7 +6,7 @@ Built with React + Vite + TypeScript, Vercel Serverless API routes, Supabase Pos
 ## What It Does
 
 - Tracks job listing URLs in Supabase.
-- Runs an hourly cron scrape (`0 * * * *`) through `/api/scrape`.
+- Runs an hourly scrape through `/api/scrape` triggered by external scheduler.
 - Scrapes with Playwright for LinkedIn and Cheerio + fetch for static pages.
 - Cleans/truncates page text, parses structured job data via OpenAI, and stores both structured fields and raw text.
 - Deduplicates jobs using `sha256(job_title + company_name + job_url)`.
@@ -19,7 +19,7 @@ Built with React + Vite + TypeScript, Vercel Serverless API routes, Supabase Pos
 - `api/` Vercel serverless routes
 - `lib/` shared backend utilities (scraping, parsing, dedupe, email)
 - `supabase/schema.sql` reproducible database schema
-- `vercel.json` cron schedule and function settings
+- `vercel.json` function settings and GitHub Actions workflow in `.github/workflows/scrape-hourly.yml`
 
 ## Required Environment Variables
 
@@ -68,11 +68,21 @@ Copy `.env.example` to `.env` for local development.
 4. Deploy:
    ```bash
    vercel deploy
-   ```
-5. Cron configuration is already in `vercel.json`:
-   - Schedule: `0 * * * *`
-   - Path: `/api/scrape`
-6. Vercel will call `/api/scrape` with `Authorization: Bearer <CRON_SECRET>`.
+   ``` 
+5. Do not add a Vercel cron in `vercel.json` on Hobby plans; cron is executed externally.
+6. Vercel will still run `/api/scrape` when called with `Authorization: Bearer <CRON_SECRET>`.
+
+## External Scheduler (Hobby Plan)
+
+Use `.github/workflows/scrape-hourly.yml` to run every hour.
+
+1. In GitHub repository Settings → Secrets and variables → Actions, add:
+   - `APP_URL` (your deployed Vercel domain, e.g. `https://your-app.vercel.app`)
+   - `CRON_SECRET` (same value used by `/api/scrape`)
+2. Enable the workflow in GitHub Actions.
+3. On each run, GitHub calls:
+   - `POST {APP_URL}/api/scrape`
+   - header `Authorization: Bearer {CRON_SECRET}`
 
 ## API Endpoints
 
