@@ -9,6 +9,10 @@ export const getServiceSupabaseClient = (): SupabaseClient => {
     return client;
   }
 
+  if (!serverEnv.supabaseUrl || !serverEnv.supabaseServiceRoleKey) {
+    throw new Error("Missing required environment variables: SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY");
+  }
+
   client = createClient(serverEnv.supabaseUrl, serverEnv.supabaseServiceRoleKey, {
     auth: {
       persistSession: false

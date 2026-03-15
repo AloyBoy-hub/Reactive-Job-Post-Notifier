@@ -15,6 +15,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
     return;
   }
 
+  if (!serverEnv.cronSecret) {
+    res.status(500).json({ error: "Missing required environment variable: CRON_SECRET" });
+    return;
+  }
+
   const token = getAuthToken(req);
   if (!token || token !== serverEnv.cronSecret) {
     res.status(401).json({ error: "Unauthorized" });

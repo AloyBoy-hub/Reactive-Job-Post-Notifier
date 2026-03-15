@@ -94,19 +94,24 @@ const handleDelete = async (req: VercelRequest, res: VercelResponse): Promise<vo
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse): Promise<void> {
-  if (req.method === "GET") {
-    await handleGet(req, res);
-    return;
-  }
-  if (req.method === "POST") {
-    await handlePost(req, res);
-    return;
-  }
-  if (req.method === "DELETE") {
-    await handleDelete(req, res);
-    return;
-  }
+  try {
+    if (req.method === "GET") {
+      await handleGet(req, res);
+      return;
+    }
+    if (req.method === "POST") {
+      await handlePost(req, res);
+      return;
+    }
+    if (req.method === "DELETE") {
+      await handleDelete(req, res);
+      return;
+    }
 
-  res.setHeader("Allow", "GET, POST, DELETE");
-  res.status(405).json({ error: "Method not allowed" });
+    res.setHeader("Allow", "GET, POST, DELETE");
+    res.status(405).json({ error: "Method not allowed" });
+  } catch (errorValue) {
+    const message = errorValue instanceof Error ? errorValue.message : "Tracked URLs API failed";
+    res.status(500).json({ error: message });
+  }
 }
