@@ -93,7 +93,9 @@ function App() {
   };
 
   useEffect(() => {
+    // Run once on mount to load the initial dashboard data.
     void refreshAll(initialFilters, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleApplyFilters = async (event: FormEvent): Promise<void> => {
@@ -169,12 +171,10 @@ function App() {
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="font-mono text-xs uppercase tracking-[0.18em] text-slate">Reactive Job Post Notifier</p>
-              <h1 className="font-heading text-3xl font-bold leading-tight md:text-4xl">
-                Live Job Watchtower
-              </h1>
+              <h1 className="font-heading text-3xl font-bold leading-tight md:text-4xl">Live Job Watchtower</h1>
               <p className="mt-2 max-w-2xl font-body text-sm text-slate">
-                Track LinkedIn and career pages, scrape hourly, parse with an LLM, and get digest alerts when new
-                roles appear.
+                Track LinkedIn and career pages, scrape hourly, parse with an LLM, and get digest alerts when new roles
+                appear.
               </p>
             </div>
             <div className="flex flex-col items-start gap-2 text-sm md:items-end">
@@ -257,9 +257,7 @@ function App() {
                       >
                         {entry.last_scrape_status}
                       </span>
-                      <span className="font-mono text-[11px] text-slate">
-                        {formatDateTime(entry.last_scraped_at)}
-                      </span>
+                      <span className="font-mono text-[11px] text-slate">{formatDateTime(entry.last_scraped_at)}</span>
                     </div>
                     <button
                       type="button"

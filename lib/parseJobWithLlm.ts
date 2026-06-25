@@ -72,11 +72,7 @@ const normalizeJobs = (value: unknown, sourceUrl: string, fullText: string): Par
 //   1. schema.org JSON-LD JobPosting embedded in the page (no API key needed).
 //   2. OpenAI extraction, when OPENAI_API_KEY is configured.
 //   3. Heuristic extraction from page text + HTML (always available).
-export const parseJobsFromText = async (
-  cleanedText: string,
-  sourceUrl: string,
-  html = ""
-): Promise<ParsedJobBatch> => {
+export const parseJobsFromText = async (cleanedText: string, sourceUrl: string, html = ""): Promise<ParsedJobBatch> => {
   const structuredJobs = extractJobPostingsFromHtml(html, sourceUrl);
   if (structuredJobs.length > 0) {
     return { jobs: structuredJobs };

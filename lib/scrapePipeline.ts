@@ -26,11 +26,7 @@ const normalizeSummary = (summary: string): string => {
 
 const getExistingJobId = async (contentHash: string): Promise<string | null> => {
   const supabase = getServiceSupabaseClient();
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("id")
-    .eq("content_hash", contentHash)
-    .maybeSingle();
+  const { data, error } = await supabase.from("jobs").select("id").eq("content_hash", contentHash).maybeSingle();
 
   if (error && error.code !== "PGRST116") {
     throw error;

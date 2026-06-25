@@ -68,7 +68,7 @@ Copy `.env.example` to `.env` for local development.
 4. Deploy:
    ```bash
    vercel deploy
-   ``` 
+   ```
 5. Do not add a Vercel cron in `vercel.json` on Hobby plans; cron is executed externally.
 6. Vercel will still run `/api/scrape` when called with `Authorization: Bearer <CRON_SECRET>`.
 

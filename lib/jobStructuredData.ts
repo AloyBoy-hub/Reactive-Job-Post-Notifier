@@ -68,7 +68,7 @@ const readSalary = (baseSalary: unknown): string | null => {
   const currency = normalizeText(obj.currency) || normalizeText(obj.currencyCode);
   const value = obj.value;
 
-  let amount = "";
+  let amount: string;
   let unit = "";
 
   if (value && typeof value === "object") {

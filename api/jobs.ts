@@ -64,9 +64,7 @@ const mapRow = (row: SearchJobRow): JobRecord => ({
   job_title: String(row.job_title ?? ""),
   company_name: String(row.company_name ?? ""),
   salary: row.salary ? String(row.salary) : null,
-  tech_stack: Array.isArray(row.tech_stack)
-    ? row.tech_stack.map((entry) => String(entry)).filter(Boolean)
-    : [],
+  tech_stack: Array.isArray(row.tech_stack) ? row.tech_stack.map((entry) => String(entry)).filter(Boolean) : [],
   requirements_summary: String(row.requirements_summary ?? ""),
   job_url: String(row.job_url ?? ""),
   raw_text: String(row.raw_text ?? ""),
