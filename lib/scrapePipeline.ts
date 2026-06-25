@@ -101,7 +101,7 @@ export const runScrapeCycle = async (trigger: "cron" | "manual"): Promise<Scrape
   for (const trackedUrl of trackedUrls) {
     try {
       const scraped = await scrapeTrackedUrl(trackedUrl.url, trackedUrl.source_type);
-      const parsed = await parseJobsFromText(scraped.cleanedText, scraped.finalUrl);
+      const parsed = await parseJobsFromText(scraped.cleanedText, scraped.finalUrl, scraped.html);
 
       for (const parsedJob of parsed.jobs) {
         const inserted = await insertJobIfNew(trackedUrl, parsedJob, scraped.cleanedText);

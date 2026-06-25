@@ -1,34 +1,9 @@
 import OpenAI from "openai";
 
+import { extractJobPostingsFromHtml } from "./jobStructuredData";
+import { buildHeuristicBatch, extractTechStack, fallbackSummary, normalizeText } from "./parseHeuristics";
 import { serverEnv } from "./serverEnv";
 import type { ParsedJob, ParsedJobBatch } from "./types";
-
-const TECH_KEYWORDS = [
-  "python",
-  "javascript",
-  "typescript",
-  "react",
-  "node.js",
-  "next.js",
-  "postgresql",
-  "mysql",
-  "mongodb",
-  "redis",
-  "docker",
-  "kubernetes",
-  "aws",
-  "gcp",
-  "azure",
-  "terraform",
-  "graphql",
-  "rest api",
-  "java",
-  "go",
-  "rust",
-  "c++",
-  "c#",
-  ".net"
-];
 
 let openAiClient: OpenAI | null = null;
 
@@ -46,52 +21,6 @@ const getOpenAiClient = (): OpenAI | null => {
   });
 
   return openAiClient;
-};
-
-const normalizeText = (value: unknown): string => {
-  if (typeof value !== "string") {
-    return "";
-  }
-  return value.replace(/\s+/g, " ").trim();
-};
-
-const extractTechStack = (text: string): string[] => {
-  const lower = text.toLowerCase();
-  return TECH_KEYWORDS.filter((keyword) => lower.includes(keyword.toLowerCase()))
-    .slice(0, 12)
-    .map((keyword) => keyword.replace(/\b\w/g, (c) => c.toUpperCase()));
-};
-
-const fallbackSummary = (text: string): string => {
-  const compressed = normalizeText(text);
-  if (!compressed) {
-    return "No requirement summary available.";
-  }
-  return compressed.slice(0, 550);
-};
-
-const fallbackParse = (text: string, sourceUrl: string): ParsedJobBatch => {
-  const lines = text
-    .split(/[\r\n]+/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const probableTitle = lines.find((line) => line.length > 4 && line.length < 120) ?? "Unknown Role";
-  const host = new URL(sourceUrl).hostname.replace(/^www\./, "");
-  const companyGuess = host.split(".")[0]?.replace(/\b\w/g, (char) => char.toUpperCase()) || "Unknown Company";
-
-  return {
-    jobs: [
-      {
-        job_title: probableTitle,
-        company_name: companyGuess,
-        salary: null,
-        tech_stack: extractTechStack(text),
-        requirements_summary: fallbackSummary(text),
-        job_url: sourceUrl
-      }
-    ]
-  };
 };
 
 const normalizeJob = (value: unknown, sourceUrl: string, fullText: string): ParsedJob | null => {
@@ -126,29 +55,36 @@ const normalizeJob = (value: unknown, sourceUrl: string, fullText: string): Pars
   };
 };
 
-const normalizeBatch = (value: unknown, sourceUrl: string, fullText: string): ParsedJobBatch => {
+const normalizeJobs = (value: unknown, sourceUrl: string, fullText: string): ParsedJob[] => {
   if (!value || typeof value !== "object") {
-    return fallbackParse(fullText, sourceUrl);
+    return [];
   }
 
   const candidate = value as Record<string, unknown>;
   const rawJobs = Array.isArray(candidate.jobs) ? candidate.jobs : [candidate];
-  const jobs = rawJobs
+  return rawJobs
     .map((entry) => normalizeJob(entry, sourceUrl, fullText))
     .filter((entry): entry is ParsedJob => entry !== null)
     .slice(0, 20);
-
-  if (jobs.length === 0) {
-    return fallbackParse(fullText, sourceUrl);
-  }
-
-  return { jobs };
 };
 
-export const parseJobsFromText = async (cleanedText: string, sourceUrl: string): Promise<ParsedJobBatch> => {
+// Parsing tiers (cheapest/most reliable first):
+//   1. schema.org JSON-LD JobPosting embedded in the page (no API key needed).
+//   2. OpenAI extraction, when OPENAI_API_KEY is configured.
+//   3. Heuristic extraction from page text + HTML (always available).
+export const parseJobsFromText = async (
+  cleanedText: string,
+  sourceUrl: string,
+  html = ""
+): Promise<ParsedJobBatch> => {
+  const structuredJobs = extractJobPostingsFromHtml(html, sourceUrl);
+  if (structuredJobs.length > 0) {
+    return { jobs: structuredJobs };
+  }
+
   const model = getOpenAiClient();
   if (!model) {
-    return fallbackParse(cleanedText, sourceUrl);
+    return buildHeuristicBatch(cleanedText, html, sourceUrl);
   }
 
   const prompt = [
@@ -186,12 +122,13 @@ export const parseJobsFromText = async (cleanedText: string, sourceUrl: string):
 
     const rawContent = completion.choices[0]?.message?.content;
     if (typeof rawContent !== "string" || !rawContent.trim()) {
-      return fallbackParse(cleanedText, sourceUrl);
+      return buildHeuristicBatch(cleanedText, html, sourceUrl);
     }
 
     const parsed = JSON.parse(rawContent) as unknown;
-    return normalizeBatch(parsed, sourceUrl, cleanedText);
+    const jobs = normalizeJobs(parsed, sourceUrl, cleanedText);
+    return jobs.length > 0 ? { jobs } : buildHeuristicBatch(cleanedText, html, sourceUrl);
   } catch {
-    return fallbackParse(cleanedText, sourceUrl);
+    return buildHeuristicBatch(cleanedText, html, sourceUrl);
   }
 };
