@@ -489,6 +489,23 @@ details.exp[open] .caret {
   padding: 18px;
   margin-bottom: 12px;
   background: var(--inset);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.job--unseen {
+  border-color: #22c55e;
+  box-shadow: inset 0 0 0 1px #22c55e40, 0 0 8px #22c55e20;
+}
+.badge-new {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 6px;
+  background: #22c55e;
+  color: #fff;
+  vertical-align: middle;
+  letter-spacing: 0.02em;
 }
 .job .jtop {
   display: flex;

@@ -108,6 +108,23 @@ function App() {
   const [newLabel, setNewLabel] = useState<string>("");
   const [newSourceType, setNewSourceType] = useState<SourceType>("company_page");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [seenJobs, setSeenJobs] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem("seenJobIds");
+      return stored ? new Set(JSON.parse(stored) as string[]) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const markSeen = (id: string): void => {
+    setSeenJobs((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      localStorage.setItem("seenJobIds", JSON.stringify([...next]));
+      return next;
+    });
+  };
 
   const loadAll = async (filterSet: Filters): Promise<void> => {
     setError("");
@@ -239,24 +256,25 @@ function App() {
   };
 
   const renderJob = (job: Job) => {
-    const description = jobDescription(job);
     const requirements = jobRequirements(job);
+    const requirementsFallback = (job.requirements_summary || "").trim();
     const isOpen = expanded[job.id];
     const source = job.tracked_urls?.label || job.tracked_urls?.url || "Unknown source";
+    const isUnseen = !seenJobs.has(job.id);
     return (
-      <div className="job" key={job.id}>
+      <div className={`job${isUnseen ? " job--unseen" : ""}`} key={job.id}>
         <div className="jtop">
           <div>
-            <h3>{job.job_title}</h3>
+            <h3>{job.job_title}{isUnseen ? <span className="badge-new">New</span> : null}</h3>
             <div className="co">{job.company_name}</div>
           </div>
           <span className="when">{formatDateTime(job.first_seen_at)}</span>
         </div>
-        {requirements.length === 0 && description ? (
+        {requirements.length === 0 && requirementsFallback ? (
           <div className="jd">
             <div className="jd-label">Requirements</div>
-            <p className={`jd-text${isOpen ? "" : " clamp"}`}>{description}</p>
-            {description.length > 180 ? (
+            <p className={`jd-text${isOpen ? "" : " clamp"}`}>{requirementsFallback}</p>
+            {requirementsFallback.length > 180 ? (
               <button type="button" className="show-more" onClick={() => toggleExpanded(job.id)}>
                 {isOpen ? "Show less" : "Show more"}
               </button>
@@ -284,7 +302,7 @@ function App() {
         ) : null}
         <div className="jfoot">
           <span className="src">Source: {source}</span>
-          <a className="link" href={job.job_url} target="_blank" rel="noreferrer">
+          <a className="link" href={job.job_url} target="_blank" rel="noreferrer" onClick={() => markSeen(job.id)}>
             Open listing →
           </a>
         </div>

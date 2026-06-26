@@ -38,6 +38,29 @@ export const fallbackSummary = (text: string): string => {
   return compressed.slice(0, HEURISTIC_SUMMARY_CHAR_LIMIT);
 };
 
+// Attempts to extract the "requirements" / "qualifications" / "who you are" section
+// from a full job description. Returns the section text or null if not found.
+const REQUIREMENTS_HEADINGS = [
+  /(?:what|who)\s+you(?:'(?:ll|re))?\s+(?:are|bring|need|looking for)/i,
+  /(?:requirements|qualifications|prerequisites|must[- ]have|minimum qualifications|basic qualifications)/i,
+  /(?:skills\s+(?:&|and)\s+(?:experience|qualifications)|what you(?:'ll)? need)/i,
+];
+
+export const extractRequirementsSection = (text: string, charLimit = HEURISTIC_SUMMARY_CHAR_LIMIT): string | null => {
+  if (!text) return null;
+
+  for (const pattern of REQUIREMENTS_HEADINGS) {
+    const match = pattern.exec(text);
+    if (match) {
+      const start = match.index;
+      const section = text.slice(start, start + charLimit).trim();
+      if (section.length > 30) return section;
+    }
+  }
+
+  return null;
+};
+
 export const extractSalary = (text: string): string | null => {
   const match = SALARY_REGEX.exec(text);
   return match ? normalizeText(match[0]) : null;

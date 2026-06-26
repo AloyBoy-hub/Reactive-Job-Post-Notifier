@@ -5,6 +5,7 @@ import type { DigestJob } from "../email/email.js";
 import { sendDigestEmail } from "../email/email.js";
 import { createContentHash } from "../util/hash.js";
 import { parseJobsFromText } from "../parsing/parseJobWithLlm.js";
+import { enrichJobFromDetailPage } from "./enrichDetail.js";
 import { scrapeTrackedUrl } from "./scrape.js";
 import { serverEnv } from "../config/serverEnv.js";
 import type { JobRecord, ScrapeCycleResult, ScrapeFailure, ScrapeStatus, TrackedUrlRecord } from "../types.js";
@@ -101,6 +102,28 @@ export const runScrapeCycle = async (trigger: "cron" | "manual"): Promise<Scrape
       const parsed = await parseJobsFromText(scraped.cleanedText, scraped.finalUrl, scraped.html);
 
       for (const parsedJob of parsed.jobs) {
+        // Enrich from detail page if requirements_summary is short/unhelpful
+        // and the job has its own URL distinct from the tracked search page.
+        const jobUrl = parsedJob.job_url?.trim() || "";
+        const isDistinctUrl = jobUrl && jobUrl !== trackedUrl.url;
+        const needsEnrichment = isDistinctUrl && parsedJob.requirements_summary.length < 120;
+
+        if (needsEnrichment) {
+          const detail = await enrichJobFromDetailPage(jobUrl);
+          if (detail) {
+            if (detail.requirements_summary) {
+              parsedJob.requirements_summary = detail.requirements_summary;
+            }
+            if (detail.tech_stack && detail.tech_stack.length > parsedJob.tech_stack.length) {
+              parsedJob.tech_stack = detail.tech_stack;
+            }
+            if (detail.salary && !parsedJob.salary) {
+              parsedJob.salary = detail.salary;
+            }
+          }
+          await delay(delayMs);
+        }
+
         const inserted = await insertJobIfNew(trackedUrl, parsedJob, scraped.cleanedText);
         if (!inserted) {
           continue;

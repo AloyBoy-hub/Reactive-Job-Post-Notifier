@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 
 import { HEURISTIC_SUMMARY_CHAR_LIMIT, MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants.js";
-import { extractTechStack, fallbackSummary, normalizeText, stripHtml } from "./parseHeuristics.js";
+import { extractRequirementsSection, extractTechStack, fallbackSummary, normalizeText, stripHtml } from "./parseHeuristics.js";
 import type { ParsedJob } from "../types.js";
 
 // Walks a parsed JSON-LD value, returning every object node it contains,
@@ -131,14 +131,15 @@ const jobFromNode = (obj: Record<string, unknown>, sourceUrl: string): ParsedJob
 
   const descriptionText = stripHtml(typeof obj.description === "string" ? obj.description : "");
 
+  const reqSection = extractRequirementsSection(descriptionText);
+
   return {
     job_title: title,
     company_name: company,
     salary: readSalary(obj.baseSalary),
     tech_stack: readSkills(obj, `${descriptionText} ${title}`),
-    requirements_summary: descriptionText
-      ? descriptionText.slice(0, HEURISTIC_SUMMARY_CHAR_LIMIT)
-      : fallbackSummary(title),
+    requirements_summary: reqSection
+      ?? (descriptionText ? descriptionText.slice(0, HEURISTIC_SUMMARY_CHAR_LIMIT) : fallbackSummary(title)),
     job_url: resolveUrl(obj.url, sourceUrl)
   };
 };

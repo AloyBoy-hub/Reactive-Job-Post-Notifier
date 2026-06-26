@@ -4,6 +4,7 @@ import { MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants.js";
 import { extractJobPostingsFromHtml } from "./jobStructuredData.js";
 import { buildHeuristicBatch, extractTechStack, fallbackSummary, normalizeText } from "./parseHeuristics.js";
 import { serverEnv } from "../config/serverEnv.js";
+import { extractJobsFromSearchPage } from "./parseSearchResults.js";
 import type { ParsedJob, ParsedJobBatch } from "../types.js";
 
 let openAiClient: OpenAI | null = null;
@@ -71,12 +72,18 @@ const normalizeJobs = (value: unknown, sourceUrl: string, fullText: string): Par
 
 // Parsing tiers (cheapest/most reliable first):
 //   1. schema.org JSON-LD JobPosting embedded in the page (no API key needed).
-//   2. OpenAI extraction, when OPENAI_API_KEY is configured.
-//   3. Heuristic extraction from page text + HTML (always available).
+//   2. Deterministic search-page parsers for known sites (LinkedIn, JobStreet).
+//   3. OpenAI extraction, when OPENAI_API_KEY is configured.
+//   4. Heuristic extraction from page text + HTML (always available).
 export const parseJobsFromText = async (cleanedText: string, sourceUrl: string, html = ""): Promise<ParsedJobBatch> => {
   const structuredJobs = extractJobPostingsFromHtml(html, sourceUrl);
   if (structuredJobs.length > 0) {
     return { jobs: structuredJobs };
+  }
+
+  const searchJobs = extractJobsFromSearchPage(html, sourceUrl);
+  if (searchJobs.length > 0) {
+    return { jobs: searchJobs };
   }
 
   const model = getOpenAiClient();

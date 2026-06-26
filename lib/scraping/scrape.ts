@@ -149,7 +149,7 @@ const scrapeLinkedInPage = async (url: string): Promise<ScrapedDocument> => {
 };
 
 const shouldUseBrowser = (url: string, sourceType: SourceType): boolean => {
-  return sourceType === "linkedin" || /linkedin\.com/i.test(url);
+  return sourceType === "linkedin" || /linkedin\.com|myworkdayjobs\.com|workday\.com|jobstreet\.com/i.test(url);
 };
 
 // WARNING: do not bypass robots.txt restrictions or private/authenticated pages.
