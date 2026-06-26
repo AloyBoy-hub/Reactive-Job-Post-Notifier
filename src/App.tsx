@@ -1,53 +1,104 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-import { addTrackedUrl, deleteTrackedUrl, fetchJobs, fetchTrackedUrls, triggerScrapeNow } from "./api";
-import { isSupabaseClientConfigured } from "./supabaseClient";
-import type { Job, SourceType, TrackedUrl } from "./types";
+import { addTrackedUrl, deleteTrackedUrl, fetchJobs, fetchStatus, fetchTrackedUrls, triggerScrapeNow } from "./api";
+import type { Job, ScrapeResponse, SourceType, SystemStatus, TrackedUrl } from "./types";
+
+type Page = "dashboard" | "scrape";
+type JobView = "jobs" | "companies";
 
 interface Filters {
   tech: string;
   companyOrSource: string;
-  startDate: string;
-  endDate: string;
+  keyword: string;
 }
 
-const initialFilters: Filters = {
-  tech: "",
-  companyOrSource: "",
-  startDate: "",
-  endDate: ""
-};
+const initialFilters: Filters = { tech: "", companyOrSource: "", keyword: "" };
 
 const formatDateTime = (value: string | null): string => {
-  if (!value) {
-    return "Never";
-  }
+  if (!value) return "never";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "Invalid date";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat("en-SG", {
-    year: "numeric",
-    month: "short",
     day: "2-digit",
+    month: "short",
     hour: "2-digit",
     minute: "2-digit"
   }).format(date);
 };
 
-const statusClassMap: Record<string, string> = {
-  success: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
-  pending: "bg-amber-100 text-amber-700"
+const formatDate = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat("en-SG", { day: "2-digit", month: "short" }).format(date);
 };
 
+const jobDescription = (job: Job): string => (job.description?.trim() || job.requirements_summary || "").trim();
+const jobRequirements = (job: Job): string[] => job.requirements?.filter((r) => r.trim()) ?? [];
+
+const titleCase = (value: string): string =>
+  value
+    .replace(/[-_]+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+
+const guessCompanyFromUrl = (rawUrl: string): string => {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.replace(/^www\./, "");
+    const segs = url.pathname.split("/").filter(Boolean);
+    const pathAts = ["greenhouse.io", "lever.co", "ashbyhq.com", "smartrecruiters.com"];
+    if (pathAts.some((d) => host.endsWith(d)) && segs[0]) return titleCase(segs[0]);
+
+    const labels = host.split(".");
+    const subAts = ["workable.com", "bamboohr.com", "myworkdayjobs.com", "teamtailor.com", "recruitee.com"];
+    if (subAts.some((d) => host.endsWith(d)) && labels.length > 2) return titleCase(labels[0]);
+
+    const common = new Set(["careers", "career", "jobs", "job", "apply", "work", "boards", "talent", "hire"]);
+    const filtered = labels.filter((l) => !common.has(l));
+    const idx = filtered.length >= 2 ? filtered.length - 2 : 0;
+    return titleCase(filtered[idx] || host);
+  } catch {
+    return "Unknown";
+  }
+};
+
+const mostCommon = (values: string[]): string | null => {
+  if (values.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const v of values) counts.set(v, (counts.get(v) ?? 0) + 1);
+  let best = values[0];
+  let bestN = 0;
+  for (const [k, n] of counts) {
+    if (n > bestN) {
+      best = k;
+      bestN = n;
+    }
+  }
+  return best;
+};
+
+interface CompanyAgg {
+  name: string;
+  roles: Job[];
+  sources: string[];
+  lastSeen: string;
+}
+
 function App() {
+  const [page, setPage] = useState<Page>("dashboard");
+  const [view, setView] = useState<JobView>("jobs");
+
   const [trackedUrls, setTrackedUrls] = useState<TrackedUrl[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [statusLatency, setStatusLatency] = useState<number | null>(null);
+  const [lastRun, setLastRun] = useState<ScrapeResponse | null>(null);
+
   const [filters, setFilters] = useState<Filters>(initialFilters);
+  const [appliedKeyword, setAppliedKeyword] = useState<string>("");
   const [lastUpdatedAt, setLastUpdatedAt] = useState<string>("");
+
   const [loading, setLoading] = useState<boolean>(true);
-  const [refreshing, setRefreshing] = useState<boolean>(false);
   const [scraping, setScraping] = useState<boolean>(false);
   const [addingUrl, setAddingUrl] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
@@ -56,56 +107,36 @@ function App() {
   const [newUrl, setNewUrl] = useState<string>("");
   const [newLabel, setNewLabel] = useState<string>("");
   const [newSourceType, setNewSourceType] = useState<SourceType>("company_page");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
-  const loadTrackedUrls = async (): Promise<void> => {
-    const items = await fetchTrackedUrls();
-    setTrackedUrls(items);
-  };
-
-  const loadJobs = async (filterSet: Filters): Promise<void> => {
-    const response = await fetchJobs({
-      tech: filterSet.tech || undefined,
-      companyOrSource: filterSet.companyOrSource || undefined,
-      startDate: filterSet.startDate || undefined,
-      endDate: filterSet.endDate || undefined
-    });
-
-    setJobs(response.jobs);
-    setLastUpdatedAt(response.lastUpdatedAt);
-  };
-
-  const refreshAll = async (filterSet: Filters, isInitialLoad: boolean): Promise<void> => {
-    if (isInitialLoad) {
-      setLoading(true);
-    } else {
-      setRefreshing(true);
-    }
+  const loadAll = async (filterSet: Filters): Promise<void> => {
     setError("");
-
     try {
-      await Promise.all([loadTrackedUrls(), loadJobs(filterSet)]);
+      const startedAt = performance.now();
+      const [urls, jobsResponse, statusResponse] = await Promise.all([
+        fetchTrackedUrls(),
+        fetchJobs({ tech: filterSet.tech || undefined, companyOrSource: filterSet.companyOrSource || undefined }),
+        fetchStatus().catch(() => null)
+      ]);
+      setTrackedUrls(urls);
+      setJobs(jobsResponse.jobs);
+      setLastUpdatedAt(jobsResponse.lastUpdatedAt);
+      setStatus(statusResponse);
+      setStatusLatency(statusResponse ? Math.round(performance.now() - startedAt) : null);
+      setAppliedKeyword(filterSet.keyword.trim().toLowerCase());
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "Failed to load dashboard data");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
     }
   };
 
   useEffect(() => {
-    // Run once on mount to load the initial dashboard data.
-    void refreshAll(initialFilters, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setLoading(true);
+    void loadAll(initialFilters).finally(() => setLoading(false));
   }, []);
 
   const handleApplyFilters = async (event: FormEvent): Promise<void> => {
     event.preventDefault();
-    await refreshAll(filters, false);
-  };
-
-  const handleResetFilters = async (): Promise<void> => {
-    setFilters(initialFilters);
-    await refreshAll(initialFilters, false);
+    await loadAll(filters);
   };
 
   const handleAddTrackedUrl = async (event: FormEvent): Promise<void> => {
@@ -113,20 +144,15 @@ function App() {
     setAddingUrl(true);
     setError("");
     setNotice("");
-
     try {
-      await addTrackedUrl({
-        url: newUrl,
-        label: newLabel,
-        sourceType: newSourceType
-      });
+      await addTrackedUrl({ url: newUrl, label: newLabel, sourceType: newSourceType });
       setNewUrl("");
       setNewLabel("");
       setNewSourceType("company_page");
-      setNotice("Tracked URL added.");
-      await loadTrackedUrls();
+      setNotice("Source added.");
+      setTrackedUrls(await fetchTrackedUrls());
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "Unable to add tracked URL");
+      setError(errorValue instanceof Error ? errorValue.message : "Unable to add source");
     } finally {
       setAddingUrl(false);
     }
@@ -135,13 +161,12 @@ function App() {
   const handleDeleteTrackedUrl = async (id: string): Promise<void> => {
     setError("");
     setNotice("");
-
     try {
       await deleteTrackedUrl(id);
-      setNotice("Tracked URL removed.");
-      await loadTrackedUrls();
+      setNotice("Source removed.");
+      setTrackedUrls(await fetchTrackedUrls());
     } catch (errorValue) {
-      setError(errorValue instanceof Error ? errorValue.message : "Unable to delete tracked URL");
+      setError(errorValue instanceof Error ? errorValue.message : "Unable to remove source");
     }
   };
 
@@ -149,14 +174,11 @@ function App() {
     setScraping(true);
     setError("");
     setNotice("");
-
     try {
       const result = await triggerScrapeNow();
-      const summary = `Scrape complete: ${result.newJobsCount} new, ${result.failedCount} failed, digest ${
-        result.digestSent ? "sent" : "skipped"
-      }.`;
-      setNotice(summary);
-      await refreshAll(filters, false);
+      setLastRun(result);
+      setNotice(`Scrape complete: ${result.newJobsCount} new, ${result.failedCount} failed.`);
+      await loadAll(filters);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "Unable to run scrape");
     } finally {
@@ -164,232 +186,499 @@ function App() {
     }
   };
 
-  return (
-    <div className="min-h-screen bg-paper px-4 py-6 text-ink md:px-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="rounded-3xl border border-black/10 bg-gradient-to-r from-[#fce6c5] via-[#f7d9c6] to-[#e6dbc6] p-6 shadow-panel">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div>
-              <p className="font-mono text-xs uppercase tracking-[0.18em] text-slate">Reactive Job Post Notifier</p>
-              <h1 className="font-heading text-3xl font-bold leading-tight md:text-4xl">Live Job Watchtower</h1>
-              <p className="mt-2 max-w-2xl font-body text-sm text-slate">
-                Track LinkedIn and career pages, scrape hourly, parse with an LLM, and get digest alerts when new roles
-                appear.
-              </p>
-            </div>
-            <div className="flex flex-col items-start gap-2 text-sm md:items-end">
-              <span className="rounded-full bg-white/70 px-3 py-1 font-mono text-xs">
-                Last Updated: {formatDateTime(lastUpdatedAt)}
-              </span>
-              <span className="rounded-full bg-white/70 px-3 py-1 font-mono text-xs">
-                Supabase Client: {isSupabaseClientConfigured() ? "configured" : "missing VITE keys"}
-              </span>
-              <button
-                type="button"
-                onClick={handleScrapeNow}
-                disabled={scraping}
-                className="rounded-full bg-ember px-4 py-2 font-heading text-sm font-semibold text-white transition hover:bg-[#bd3f1f] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {scraping ? "Scraping..." : "Scrape Now"}
-              </button>
-            </div>
+  const filteredJobs = useMemo(() => {
+    if (!appliedKeyword) return jobs;
+    return jobs.filter((job) => {
+      const haystack = [jobDescription(job), jobRequirements(job).join(" "), job.job_title].join(" ").toLowerCase();
+      return haystack.includes(appliedKeyword);
+    });
+  }, [jobs, appliedKeyword]);
+
+  const companies = useMemo<CompanyAgg[]>(() => {
+    const map = new Map<string, CompanyAgg>();
+    for (const job of filteredJobs) {
+      const key = job.company_name || "Unknown";
+      let agg = map.get(key);
+      if (!agg) {
+        agg = { name: key, roles: [], sources: [], lastSeen: job.first_seen_at };
+        map.set(key, agg);
+      }
+      agg.roles.push(job);
+      const src = job.tracked_urls?.label || job.tracked_urls?.url;
+      if (src) {
+        const labelled = job.tracked_urls?.source_type === "linkedin" ? `via ${src}` : src;
+        if (!agg.sources.includes(labelled)) agg.sources.push(labelled);
+      }
+      if (job.first_seen_at > agg.lastSeen) agg.lastSeen = job.first_seen_at;
+    }
+    for (const agg of map.values()) agg.roles.sort((a, b) => b.first_seen_at.localeCompare(a.first_seen_at));
+    return [...map.values()].sort((a, b) => b.lastSeen.localeCompare(a.lastSeen));
+  }, [filteredJobs]);
+
+  const companyCount = companies.length;
+  const totalJobs = status?.jobCount ?? jobs.length;
+  const newThisWeek = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    return jobs.filter((j) => new Date(j.first_seen_at).getTime() >= weekAgo).length;
+  }, [jobs]);
+
+  const toggleExpanded = (id: string): void => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const sourceCompany = (url: TrackedUrl) => {
+    const urlJobs = jobs.filter((j) => j.tracked_url_id === url.id);
+    if (url.source_type === "linkedin") {
+      const counts = new Map<string, number>();
+      for (const j of urlJobs) counts.set(j.company_name, (counts.get(j.company_name) ?? 0) + 1);
+      const list = [...counts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+      return { multi: true as const, companies: list, totalRoles: urlJobs.length };
+    }
+    const name = mostCommon(urlJobs.map((j) => j.company_name));
+    return name
+      ? { multi: false as const, name, roles: urlJobs.length, guessed: false }
+      : { multi: false as const, name: guessCompanyFromUrl(url.url), roles: 0, guessed: true };
+  };
+
+  const renderJob = (job: Job) => {
+    const description = jobDescription(job);
+    const requirements = jobRequirements(job);
+    const isOpen = expanded[job.id];
+    const source = job.tracked_urls?.label || job.tracked_urls?.url || "Unknown source";
+    return (
+      <div className="job" key={job.id}>
+        <div className="jtop">
+          <div>
+            <h3>{job.job_title}</h3>
+            <div className="co">{job.company_name}</div>
           </div>
-        </header>
-
-        {error ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-        {notice ? (
-          <p className="rounded-xl border border-green-200 bg-green-50 p-3 text-sm text-green-700">{notice}</p>
-        ) : null}
-
-        <section className="grid gap-6 lg:grid-cols-[1.05fr_1.95fr]">
-          <article className="rounded-3xl border border-black/10 bg-white/85 p-5 shadow-panel">
-            <h2 className="font-heading text-xl font-semibold">Tracked URLs</h2>
-            <p className="mt-1 text-sm text-slate">Add or remove listing sources watched by the hourly cron job.</p>
-
-            <form onSubmit={handleAddTrackedUrl} className="mt-4 space-y-3">
-              <input
-                type="url"
-                required
-                value={newUrl}
-                onChange={(event) => setNewUrl(event.target.value)}
-                placeholder="https://www.linkedin.com/jobs/search/..."
-                className="w-full rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none ring-0 transition focus:border-ember"
-              />
-              <input
-                type="text"
-                value={newLabel}
-                onChange={(event) => setNewLabel(event.target.value)}
-                placeholder="Optional label (e.g. Product roles)"
-                className="w-full rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              />
-              <select
-                value={newSourceType}
-                onChange={(event) => setNewSourceType(event.target.value as SourceType)}
-                className="w-full rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              >
-                <option value="company_page">Company Career Page</option>
-                <option value="linkedin">LinkedIn</option>
-              </select>
-              <button
-                type="submit"
-                disabled={addingUrl}
-                className="w-full rounded-xl bg-moss px-4 py-2 font-heading text-sm font-semibold text-white transition hover:bg-[#2e5a4e] disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {addingUrl ? "Adding..." : "Add URL"}
+          <span className="when">{formatDateTime(job.first_seen_at)}</span>
+        </div>
+        {description ? (
+          <div className="jd">
+            <div className="jd-label">Description</div>
+            <p className={`jd-text${isOpen ? "" : " clamp"}`}>{description}</p>
+            {description.length > 180 ? (
+              <button type="button" className="show-more" onClick={() => toggleExpanded(job.id)}>
+                {isOpen ? "Show less" : "Show more"}
               </button>
-            </form>
+            ) : null}
+          </div>
+        ) : null}
+        {requirements.length > 0 ? (
+          <div className="jd">
+            <div className="jd-label">Requirements</div>
+            <ul className="req">
+              {requirements.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {job.tech_stack.length > 0 ? (
+          <div className="chips">
+            {job.tech_stack.map((t) => (
+              <span className="chip" key={`${job.id}-${t}`}>
+                {t}
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="jfoot">
+          <span className="src">Source: {source}</span>
+          <a className="link" href={job.job_url} target="_blank" rel="noreferrer">
+            Open listing →
+          </a>
+        </div>
+      </div>
+    );
+  };
 
-            <div className="mt-4 space-y-3">
-              {trackedUrls.length === 0 ? (
-                <p className="rounded-xl border border-dashed border-black/20 p-4 text-sm text-slate">
-                  No tracked URLs yet.
-                </p>
-              ) : (
-                trackedUrls.map((entry) => (
-                  <div key={entry.id} className="rounded-2xl border border-black/10 bg-white p-3">
-                    <p className="truncate text-sm font-semibold">{entry.label || entry.url}</p>
-                    <p className="mt-1 truncate font-mono text-xs text-slate">{entry.url}</p>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span
-                        className={`rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-wider ${
-                          statusClassMap[entry.last_scrape_status] || "bg-slate-100 text-slate-700"
-                        }`}
-                      >
-                        {entry.last_scrape_status}
-                      </span>
-                      <span className="font-mono text-[11px] text-slate">{formatDateTime(entry.last_scraped_at)}</span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleDeleteTrackedUrl(entry.id);
-                      }}
-                      className="mt-2 text-xs font-semibold text-red-600 hover:text-red-700"
-                    >
-                      Remove
+  const healthy = Boolean(status?.database);
+
+  return (
+    <>
+      <header className="nav">
+        <div className="wrap nav-inner">
+          <div className="brand">
+            <span className="logo" /> JobWatch
+          </div>
+          <nav className="nav-links">
+            <button className={page === "dashboard" ? "active" : ""} onClick={() => setPage("dashboard")}>
+              Dashboard
+            </button>
+            <button className={page === "scrape" ? "active" : ""} onClick={() => setPage("scrape")}>
+              Scrape
+            </button>
+          </nav>
+          <span className={`tag ${healthy ? "ok" : ""}`}>
+            <span className={`dot ${healthy ? "" : "red"}`} />
+            {healthy ? "All systems go" : "Backend issue"}
+          </span>
+        </div>
+      </header>
+
+      <main>
+        {page === "dashboard" ? (
+          <section className="page">
+            <div className="wrap">
+              <div className="toprow">
+                <div className="page-head">
+                  <h1>Dashboard</h1>
+                  <p>Roles and companies discovered across your tracked sources.</p>
+                </div>
+                <span className="tag">Last updated {formatDateTime(lastUpdatedAt || null)}</span>
+              </div>
+
+              {error ? <div className="notice err">{error}</div> : null}
+              {notice ? <div className="notice ok">{notice}</div> : null}
+
+              <div className="stats">
+                <div className="stat">
+                  <div className="n">{trackedUrls.length}</div>
+                  <div className="l">Tracked sources</div>
+                </div>
+                <div className="stat">
+                  <div className="n">{companyCount}</div>
+                  <div className="l">Companies</div>
+                </div>
+                <div className="stat">
+                  <div className="n">{totalJobs}</div>
+                  <div className="l">Total jobs</div>
+                </div>
+                <div className="stat">
+                  <div className="n">{newThisWeek}</div>
+                  <div className="l">New this week</div>
+                </div>
+              </div>
+
+              <div className="card">
+                <div className="toprow" style={{ marginBottom: 16 }}>
+                  <div className="segmented">
+                    <button className={view === "jobs" ? "active" : ""} onClick={() => setView("jobs")}>
+                      Jobs
+                    </button>
+                    <button className={view === "companies" ? "active" : ""} onClick={() => setView("companies")}>
+                      Companies
                     </button>
                   </div>
-                ))
-              )}
-            </div>
-          </article>
+                </div>
 
-          <article className="rounded-3xl border border-black/10 bg-white/85 p-5 shadow-panel">
-            <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="font-heading text-xl font-semibold">Historical Jobs</h2>
-                <p className="mt-1 text-sm text-slate">Most recently discovered roles, filtered by your criteria.</p>
+                {view === "jobs" ? (
+                  <>
+                    <form className="filters" onSubmit={handleApplyFilters}>
+                      <input
+                        placeholder="Tech keyword"
+                        value={filters.tech}
+                        onChange={(e) => setFilters((p) => ({ ...p, tech: e.target.value }))}
+                      />
+                      <input
+                        placeholder="Company or source"
+                        value={filters.companyOrSource}
+                        onChange={(e) => setFilters((p) => ({ ...p, companyOrSource: e.target.value }))}
+                      />
+                      <input
+                        placeholder="Keyword in JD / requirements"
+                        value={filters.keyword}
+                        onChange={(e) => setFilters((p) => ({ ...p, keyword: e.target.value }))}
+                      />
+                      <button type="submit" className="btn btn-ghost btn-sm">
+                        Apply
+                      </button>
+                    </form>
+
+                    {loading ? (
+                      <div className="empty">Loading jobs…</div>
+                    ) : filteredJobs.length === 0 ? (
+                      <div className="empty">No jobs matched your filters yet.</div>
+                    ) : (
+                      filteredJobs.map(renderJob)
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <p className="sub" style={{ marginTop: -4 }}>
+                      Grouped from parsed postings · sorted by most recent. Click a company to see its roles.
+                    </p>
+                    {companies.length === 0 ? (
+                      <div className="empty">No companies discovered yet.</div>
+                    ) : (
+                      companies.map((c, i) => (
+                        <details className="exp" key={c.name} open={i === 0}>
+                          <summary>
+                            <span className="caret">▶</span>
+                            <span className="co-name">{c.name}</span>
+                            <span className="co-meta">
+                              {c.roles.length} role{c.roles.length === 1 ? "" : "s"} · {c.sources.join(", ") || "—"}
+                              <br />
+                              last seen {formatDateTime(c.lastSeen)}
+                            </span>
+                          </summary>
+                          <div className="exp-body">
+                            {c.roles.map((job) => (
+                              <div className="mini" key={job.id}>
+                                <div className="jtop">
+                                  <h4>{job.job_title}</h4>
+                                  <span className="when">{formatDate(job.first_seen_at)}</span>
+                                </div>
+                                <p className="snip">
+                                  {jobDescription(job).slice(0, 160) || "No description"}
+                                  {job.tech_stack.length > 0 ? ` · ${job.tech_stack.slice(0, 4).join(", ")}` : ""}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      ))
+                    )}
+                  </>
+                )}
               </div>
-              <button
-                type="button"
-                onClick={() => {
-                  void refreshAll(filters, false);
-                }}
-                disabled={refreshing}
-                className="rounded-full border border-black/20 px-4 py-2 text-sm font-semibold transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-70"
-              >
-                {refreshing ? "Refreshing..." : "Refresh"}
-              </button>
             </div>
+          </section>
+        ) : (
+          <section className="page">
+            <div className="wrap">
+              <div className="page-head" style={{ marginBottom: 22 }}>
+                <h1>Scrape</h1>
+                <p>System status, tracked sources, and manual runs.</p>
+              </div>
 
-            <form onSubmit={handleApplyFilters} className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <input
-                type="text"
-                value={filters.tech}
-                onChange={(event) => setFilters((prev) => ({ ...prev, tech: event.target.value }))}
-                placeholder="Tech stack keyword"
-                className="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              />
-              <input
-                type="text"
-                value={filters.companyOrSource}
-                onChange={(event) =>
-                  setFilters((prev) => ({
-                    ...prev,
-                    companyOrSource: event.target.value
-                  }))
-                }
-                placeholder="Company or source URL"
-                className="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              />
-              <input
-                type="date"
-                value={filters.startDate}
-                onChange={(event) => setFilters((prev) => ({ ...prev, startDate: event.target.value }))}
-                className="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              />
-              <input
-                type="date"
-                value={filters.endDate}
-                onChange={(event) => setFilters((prev) => ({ ...prev, endDate: event.target.value }))}
-                className="rounded-xl border border-black/15 bg-white px-3 py-2 text-sm outline-none transition focus:border-ember"
-              />
-              <button
-                type="submit"
-                className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#111827]"
-              >
-                Apply Filters
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void handleResetFilters();
-                }}
-                className="rounded-xl border border-black/20 px-4 py-2 text-sm font-semibold transition hover:bg-black/5"
-              >
-                Reset
-              </button>
-            </form>
+              {error ? <div className="notice err">{error}</div> : null}
+              {notice ? <div className="notice ok">{notice}</div> : null}
 
-            {loading ? (
-              <p className="mt-5 text-sm text-slate">Loading jobs...</p>
-            ) : jobs.length === 0 ? (
-              <p className="mt-5 rounded-xl border border-dashed border-black/20 p-4 text-sm text-slate">
-                No jobs matched your filters yet.
-              </p>
-            ) : (
-              <div className="mt-5 space-y-3">
-                {jobs.map((job) => (
-                  <article key={job.id} className="rounded-2xl border border-black/10 bg-white p-4">
-                    <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
-                      <div>
-                        <h3 className="font-heading text-lg font-semibold">{job.job_title}</h3>
-                        <p className="text-sm text-slate">
-                          {job.company_name} | {job.salary || "Salary not specified"}
-                        </p>
-                      </div>
-                      <span className="font-mono text-xs text-slate">{formatDateTime(job.first_seen_at)}</span>
+              <div className="card" style={{ marginBottom: 18 }}>
+                <div className="toprow" style={{ marginBottom: 14 }}>
+                  <h2>System status</h2>
+                  <span className="hint">checked {formatDateTime(lastUpdatedAt || null)}</span>
+                </div>
+                <div className="status-grid">
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status ? "" : "red"}`} />
+                      API
                     </div>
-
-                    <p className="mt-3 text-sm leading-6">{job.requirements_summary}</p>
-
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(job.tech_stack.length > 0 ? job.tech_stack : ["Not specified"]).map((tech) => (
-                        <span key={`${job.id}-${tech}`} className="rounded-full bg-[#f1efe9] px-2 py-1 text-xs">
-                          {tech}
-                        </span>
-                      ))}
+                    <div className="detail">{status ? `operational · ${statusLatency ?? "—"} ms` : "unreachable"}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status?.database ? "" : "red"}`} />
+                      Database
                     </div>
+                    <div className="detail">{status?.database ? "Supabase · connected" : "disconnected"}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Hourly cron
+                    </div>
+                    <div className="detail">GitHub Actions · hourly</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Last scrape
+                    </div>
+                    <div className="detail">{formatDateTime(status?.lastScrapeAt ?? null)}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Parser
+                    </div>
+                    <div className="detail">
+                      {status?.openAiConfigured ? "OpenAI + JSON-LD" : "JSON-LD + heuristics"}
+                    </div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status?.resendConfigured ? "" : "amber"}`} />
+                      Email digest
+                    </div>
+                    <div className="detail">{status?.resendConfigured ? "Resend · ready" : "not configured"}</div>
+                  </div>
+                </div>
+              </div>
 
-                    <div className="mt-3 text-xs text-slate">
-                      <p>Source: {job.tracked_urls?.label || job.tracked_urls?.url || "Unknown source"}</p>
-                      <a
-                        className="font-semibold text-ember underline underline-offset-2"
-                        href={job.job_url}
-                        target="_blank"
-                        rel="noreferrer"
+              <div className="grid2">
+                <div className="card">
+                  <h2>Tracked sources</h2>
+                  <p className="sub">Add a LinkedIn search or a company career page.</p>
+                  <form onSubmit={handleAddTrackedUrl}>
+                    <label className="field">
+                      <input
+                        type="url"
+                        required
+                        placeholder="https://boards.greenhouse.io/acme"
+                        value={newUrl}
+                        onChange={(e) => setNewUrl(e.target.value)}
+                      />
+                    </label>
+                    <label className="field">
+                      <input
+                        type="text"
+                        placeholder="Optional label (e.g. Product roles)"
+                        value={newLabel}
+                        onChange={(e) => setNewLabel(e.target.value)}
+                      />
+                    </label>
+                    <div className="row">
+                      <select value={newSourceType} onChange={(e) => setNewSourceType(e.target.value as SourceType)}>
+                        <option value="company_page">Company Career Page</option>
+                        <option value="linkedin">LinkedIn</option>
+                      </select>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={addingUrl}
+                        style={{ whiteSpace: "nowrap" }}
                       >
-                        Open listing
-                      </a>
+                        {addingUrl ? "Adding…" : "Add source"}
+                      </button>
                     </div>
-                  </article>
-                ))}
+                  </form>
+
+                  {trackedUrls.length === 0 ? (
+                    <div className="empty" style={{ marginTop: 12 }}>
+                      No sources yet.
+                    </div>
+                  ) : (
+                    trackedUrls.map((url) => {
+                      const info = sourceCompany(url);
+                      return (
+                        <div className="url-item" key={url.id}>
+                          <div className="top">
+                            <div>
+                              <div className="label">{url.label || url.url}</div>
+                              <div className="u">{url.url}</div>
+                            </div>
+                            <span className={`badge ${url.last_scrape_status}`}>{url.last_scrape_status}</span>
+                          </div>
+
+                          {info.multi ? (
+                            <details className="exp">
+                              <summary>
+                                <span className="caret">▶</span>
+                                <span className="co-name" style={{ fontSize: 14 }}>
+                                  {info.companies.length} compan{info.companies.length === 1 ? "y" : "ies"} discovered
+                                </span>
+                                <span className="co-meta">{info.totalRoles} roles</span>
+                              </summary>
+                              <div className="exp-body">
+                                {info.companies.length === 0 ? (
+                                  <div className="co-row">No companies parsed yet.</div>
+                                ) : (
+                                  info.companies.map((c) => (
+                                    <div className="co-row" key={c.name}>
+                                      <span>{c.name}</span>
+                                      <span className="hint">
+                                        {c.count} role{c.count === 1 ? "" : "s"}
+                                      </span>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </details>
+                          ) : (
+                            <div className="company-line">
+                              Company: <strong>{info.name}</strong>{" "}
+                              {info.guessed ? (
+                                <span className="hint guess">guessed from URL · confirms after first scrape</span>
+                              ) : (
+                                <span className="hint">
+                                  · {info.roles} role{info.roles === 1 ? "" : "s"}
+                                </span>
+                              )}
+                            </div>
+                          )}
+
+                          <div className="acts">
+                            <span className="seen">{formatDateTime(url.last_scraped_at)}</span>
+                            <button
+                              type="button"
+                              className="remove"
+                              onClick={() => void handleDeleteTrackedUrl(url.id)}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
+                <div className="card">
+                  <h2>Run a scrape</h2>
+                  <p className="sub">Scrapes every source now, in addition to the hourly schedule.</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ width: "100%" }}
+                    disabled={scraping}
+                    onClick={() => void handleScrapeNow()}
+                  >
+                    {scraping ? "Scraping…" : "Scrape now"}
+                  </button>
+
+                  <div className="url-item" style={{ marginTop: 16 }}>
+                    <div className="mono" style={{ fontSize: 12, color: "var(--faint)", marginBottom: 8 }}>
+                      {lastRun ? "LAST MANUAL RUN" : "NO MANUAL RUN YET"}
+                    </div>
+                    {lastRun ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "9px 18px" }}>
+                        <span className="hint">Scanned</span>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{lastRun.scannedCount} sources</span>
+                        <span className="hint">New jobs</span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--green)" }}>
+                          {lastRun.newJobsCount}
+                        </span>
+                        <span className="hint">Failed</span>
+                        <span style={{ fontWeight: 600, fontSize: 14, color: "var(--red)" }}>
+                          {lastRun.failedCount}
+                        </span>
+                        <span className="hint">Digest email</span>
+                        <span style={{ fontWeight: 600, fontSize: 14 }}>{lastRun.digestSent ? "sent" : "skipped"}</span>
+                      </div>
+                    ) : (
+                      <div className="hint">Click “Scrape now” to run the pipeline immediately.</div>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: 16 }}>
+                    <div className="mono" style={{ fontSize: 12, color: "var(--faint)", marginBottom: 4 }}>
+                      SOURCE ACTIVITY
+                    </div>
+                    {trackedUrls.length === 0 ? (
+                      <div className="hint">No sources yet.</div>
+                    ) : (
+                      [...trackedUrls]
+                        .sort((a, b) => (b.last_scraped_at || "").localeCompare(a.last_scraped_at || ""))
+                        .slice(0, 6)
+                        .map((url) => (
+                          <div className="activity-line" key={url.id}>
+                            <span className="t">{formatDateTime(url.last_scraped_at)}</span> &nbsp;
+                            <span
+                              style={{ color: url.last_scrape_status === "failed" ? "var(--red)" : "var(--muted)" }}
+                            >
+                              {url.label || url.url} · {url.last_scrape_status}
+                            </span>
+                          </div>
+                        ))
+                    )}
+                  </div>
+                </div>
               </div>
-            )}
-          </article>
-        </section>
-      </div>
-    </div>
+            </div>
+          </section>
+        )}
+      </main>
+
+      <footer className="foot">
+        <div className="wrap foot-inner">
+          <span>JobWatch · personal project</span>
+          <span className="mono">scrape · parse · dedupe · notify</span>
+        </div>
+      </footer>
+    </>
   );
 }
 

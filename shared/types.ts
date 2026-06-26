@@ -23,6 +23,10 @@ export interface Job {
   salary: string | null;
   tech_stack: string[];
   requirements_summary: string;
+  // Newer content model (populated once the parser/schema migration lands).
+  // The frontend falls back to requirements_summary when these are absent.
+  description?: string | null;
+  requirements?: string[];
   job_url: string;
   raw_text: string;
   content_hash: string;
@@ -32,6 +36,15 @@ export interface Job {
     label: string | null;
     source_type: SourceType;
   } | null;
+}
+
+export interface SystemStatus {
+  database: boolean;
+  openAiConfigured: boolean;
+  resendConfigured: boolean;
+  lastScrapeAt: string | null;
+  trackedCount: number;
+  jobCount: number;
 }
 
 export interface ScrapeFailure {

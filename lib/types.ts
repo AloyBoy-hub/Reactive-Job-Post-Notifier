@@ -1,6 +1,6 @@
 // Re-export shared types under the backend's historical names so existing
 // imports keep working, plus the backend-only parsing/scraping types.
-export type { SourceType, ScrapeStatus, ScrapeFailure } from "../shared/types.js";
+export type { SourceType, ScrapeStatus, ScrapeFailure, SystemStatus } from "../shared/types.js";
 export type {
   Job as JobRecord,
   TrackedUrl as TrackedUrlRecord,
