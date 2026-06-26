@@ -1,4 +1,4 @@
-import type { Job, ScrapeResponse, SourceType, TrackedUrl } from "./types";
+import type { Job, ScrapeResponse, SourceType, SystemStatus, TrackedUrl } from "./types";
 
 interface ApiErrorPayload {
   error?: string;
@@ -68,4 +68,8 @@ export const triggerScrapeNow = async (): Promise<ScrapeResponse> => {
   return requestJson<ScrapeResponse>("/api/scrape-now", {
     method: "POST"
   });
+};
+
+export const fetchStatus = async (): Promise<SystemStatus> => {
+  return requestJson<SystemStatus>("/api/status");
 };
