@@ -252,9 +252,9 @@ function App() {
           </div>
           <span className="when">{formatDateTime(job.first_seen_at)}</span>
         </div>
-        {description ? (
+        {requirements.length === 0 && description ? (
           <div className="jd">
-            <div className="jd-label">Description</div>
+            <div className="jd-label">Requirements</div>
             <p className={`jd-text${isOpen ? "" : " clamp"}`}>{description}</p>
             {description.length > 180 ? (
               <button type="button" className="show-more" onClick={() => toggleExpanded(job.id)}>
