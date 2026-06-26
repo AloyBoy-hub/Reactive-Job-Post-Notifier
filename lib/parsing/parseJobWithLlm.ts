@@ -1,10 +1,10 @@
 import OpenAI from "openai";
 
-import { MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants";
-import { extractJobPostingsFromHtml } from "./jobStructuredData";
-import { buildHeuristicBatch, extractTechStack, fallbackSummary, normalizeText } from "./parseHeuristics";
-import { serverEnv } from "../config/serverEnv";
-import type { ParsedJob, ParsedJobBatch } from "../types";
+import { MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants.js";
+import { extractJobPostingsFromHtml } from "./jobStructuredData.js";
+import { buildHeuristicBatch, extractTechStack, fallbackSummary, normalizeText } from "./parseHeuristics.js";
+import { serverEnv } from "../config/serverEnv.js";
+import type { ParsedJob, ParsedJobBatch } from "../types.js";
 
 let openAiClient: OpenAI | null = null;
 

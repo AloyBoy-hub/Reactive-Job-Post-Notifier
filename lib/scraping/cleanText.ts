@@ -1,6 +1,6 @@
 import { load } from "cheerio";
 
-import { PAGE_TEXT_CHAR_LIMIT } from "../config/constants";
+import { PAGE_TEXT_CHAR_LIMIT } from "../config/constants.js";
 
 export const cleanHtmlToText = (html: string, maxCharacters = PAGE_TEXT_CHAR_LIMIT): string => {
   const $ = load(html);

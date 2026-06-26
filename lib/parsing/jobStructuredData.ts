@@ -1,8 +1,8 @@
 import { load } from "cheerio";
 
-import { HEURISTIC_SUMMARY_CHAR_LIMIT, MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants";
-import { extractTechStack, fallbackSummary, normalizeText, stripHtml } from "./parseHeuristics";
-import type { ParsedJob } from "../types";
+import { HEURISTIC_SUMMARY_CHAR_LIMIT, MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants.js";
+import { extractTechStack, fallbackSummary, normalizeText, stripHtml } from "./parseHeuristics.js";
+import type { ParsedJob } from "../types.js";
 
 // Walks a parsed JSON-LD value, returning every object node it contains,
 // descending into top-level arrays and `@graph` collections.

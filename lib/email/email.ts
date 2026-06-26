@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
-import { EMAIL_SUMMARY_CHAR_LIMIT } from "../config/constants";
-import { serverEnv } from "../config/serverEnv";
+import { EMAIL_SUMMARY_CHAR_LIMIT } from "../config/constants.js";
+import { serverEnv } from "../config/serverEnv.js";
 
 export interface DigestJob {
   jobTitle: string;

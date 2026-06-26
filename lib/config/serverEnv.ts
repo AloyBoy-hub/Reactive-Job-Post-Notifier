@@ -1,4 +1,4 @@
-import { DEFAULT_OPENAI_MODEL, DEFAULT_SCRAPE_DELAY_MS } from "./constants";
+import { DEFAULT_OPENAI_MODEL, DEFAULT_SCRAPE_DELAY_MS } from "./constants.js";
 
 const readOptional = (name: string): string | undefined => {
   const value = process.env[name];

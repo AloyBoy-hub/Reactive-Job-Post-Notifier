@@ -1,7 +1,7 @@
 import { load } from "cheerio";
 
-import { HEURISTIC_SUMMARY_CHAR_LIMIT, HEURISTIC_TECH_LIMIT, TECH_KEYWORDS } from "../config/constants";
-import type { ParsedJobBatch } from "../types";
+import { HEURISTIC_SUMMARY_CHAR_LIMIT, HEURISTIC_TECH_LIMIT, TECH_KEYWORDS } from "../config/constants.js";
+import type { ParsedJobBatch } from "../types.js";
 
 // Matches common salary shapes: "$120,000", "$120k", "120k - 150k", "USD 90,000",
 // optionally followed by a period like "per year". Returns the first occurrence.

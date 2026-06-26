@@ -1,13 +1,13 @@
-import { MAX_TECH_STACK, PAGE_TEXT_CHAR_LIMIT, STORED_SUMMARY_CHAR_LIMIT } from "../config/constants";
-import { getServiceSupabaseClient } from "../db/db";
-import { delay, normalizeDelay } from "../util/delay";
-import type { DigestJob } from "../email/email";
-import { sendDigestEmail } from "../email/email";
-import { createContentHash } from "../util/hash";
-import { parseJobsFromText } from "../parsing/parseJobWithLlm";
-import { scrapeTrackedUrl } from "./scrape";
-import { serverEnv } from "../config/serverEnv";
-import type { JobRecord, ScrapeCycleResult, ScrapeFailure, ScrapeStatus, TrackedUrlRecord } from "../types";
+import { MAX_TECH_STACK, PAGE_TEXT_CHAR_LIMIT, STORED_SUMMARY_CHAR_LIMIT } from "../config/constants.js";
+import { getServiceSupabaseClient } from "../db/db.js";
+import { delay, normalizeDelay } from "../util/delay.js";
+import type { DigestJob } from "../email/email.js";
+import { sendDigestEmail } from "../email/email.js";
+import { createContentHash } from "../util/hash.js";
+import { parseJobsFromText } from "../parsing/parseJobWithLlm.js";
+import { scrapeTrackedUrl } from "./scrape.js";
+import { serverEnv } from "../config/serverEnv.js";
+import type { JobRecord, ScrapeCycleResult, ScrapeFailure, ScrapeStatus, TrackedUrlRecord } from "../types.js";
 
 const updateTrackedUrlStatus = async (id: string, status: ScrapeStatus): Promise<void> => {
   const supabase = getServiceSupabaseClient();

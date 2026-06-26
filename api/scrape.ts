@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-import { getAuthToken } from "../lib/util/http";
-import { runScrapeCycle } from "../lib/scraping/scrapePipeline";
-import { serverEnv } from "../lib/config/serverEnv";
+import { getAuthToken } from "../lib/util/http.js";
+import { runScrapeCycle } from "../lib/scraping/scrapePipeline.js";
+import { serverEnv } from "../lib/config/serverEnv.js";
 
 export const config = {
   maxDuration: 60

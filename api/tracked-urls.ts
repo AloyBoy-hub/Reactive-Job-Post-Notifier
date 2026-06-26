@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-import { getServiceSupabaseClient } from "../lib/db/db";
-import { getJsonBody } from "../lib/util/http";
-import type { SourceType } from "../lib/types";
+import { getServiceSupabaseClient } from "../lib/db/db.js";
+import { getJsonBody } from "../lib/util/http.js";
+import type { SourceType } from "../lib/types.js";
 
 interface CreateTrackedUrlBody {
   url?: string;

@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-import { DEFAULT_JOBS_LIMIT, MAX_JOBS_LIMIT } from "../lib/config/constants";
-import { getServiceSupabaseClient } from "../lib/db/db";
-import type { JobRecord, SourceType } from "../lib/types";
+import { DEFAULT_JOBS_LIMIT, MAX_JOBS_LIMIT } from "../lib/config/constants.js";
+import { getServiceSupabaseClient } from "../lib/db/db.js";
+import type { JobRecord, SourceType } from "../lib/types.js";
 
 const firstValue = (input: string | string[] | undefined): string => {
   if (Array.isArray(input)) {

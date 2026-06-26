@@ -1,4 +1,4 @@
-import { DEFAULT_SCRAPE_DELAY_MS, MAX_SCRAPE_DELAY_MS, MIN_SCRAPE_DELAY_MS } from "../config/constants";
+import { DEFAULT_SCRAPE_DELAY_MS, MAX_SCRAPE_DELAY_MS, MIN_SCRAPE_DELAY_MS } from "../config/constants.js";
 
 export const delay = async (milliseconds: number): Promise<void> => {
   await new Promise((resolve) => {
