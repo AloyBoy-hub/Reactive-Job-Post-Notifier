@@ -144,6 +144,10 @@ export const runScrapeCycle = async (trigger: "cron" | "manual"): Promise<Scrape
       await updateTrackedUrlStatus(trackedUrl.id, "success");
     } catch (errorValue) {
       const reason = errorValue instanceof Error ? errorValue.message : "Unknown scrape error";
+      console.error(`[scrape] FAILED ${trackedUrl.url}: ${reason}`);
+      if (errorValue instanceof Error && errorValue.stack) {
+        console.error(errorValue.stack);
+      }
       failures.push({
         trackedUrlId: trackedUrl.id,
         url: trackedUrl.url,

@@ -194,7 +194,8 @@ function App() {
     try {
       const result = await triggerScrapeNow();
       setLastRun(result);
-      setNotice(`Scrape complete: ${result.newJobsCount} new, ${result.failedCount} failed.`);
+      const failReasons = result.failures?.map((f: { url: string; reason: string }) => `${new URL(f.url).hostname}: ${f.reason}`).join(" | ") || "";
+      setNotice(`Scrape complete: ${result.newJobsCount} new, ${result.failedCount} failed.${failReasons ? " Errors: " + failReasons : ""}`);
       await loadAll(filters);
     } catch (errorValue) {
       setError(errorValue instanceof Error ? errorValue.message : "Unable to run scrape");
