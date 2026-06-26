@@ -149,7 +149,14 @@ const scrapeLinkedInPage = async (url: string): Promise<ScrapedDocument> => {
 };
 
 const shouldUseBrowser = (url: string, sourceType: SourceType): boolean => {
-  return sourceType === "linkedin" || /linkedin\.com|myworkdayjobs\.com|workday\.com|jobstreet\.com/i.test(url);
+  // Public LinkedIn search pages (/jobs/search) work via static fetch and
+  // are parsed by the deterministic search-page parser.  Only fall back to
+  // Playwright for non-search LinkedIn pages (e.g. individual job views
+  // behind auth walls).
+  if (/linkedin\.com\/jobs\/search\b/i.test(url)) {
+    return false;
+  }
+  return sourceType === "linkedin" || /linkedin\.com/i.test(url);
 };
 
 // WARNING: do not bypass robots.txt restrictions or private/authenticated pages.
