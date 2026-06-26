@@ -1,33 +1,7 @@
 import { load } from "cheerio";
 
-import type { ParsedJobBatch } from "./types";
-
-const TECH_KEYWORDS = [
-  "python",
-  "javascript",
-  "typescript",
-  "react",
-  "node.js",
-  "next.js",
-  "postgresql",
-  "mysql",
-  "mongodb",
-  "redis",
-  "docker",
-  "kubernetes",
-  "aws",
-  "gcp",
-  "azure",
-  "terraform",
-  "graphql",
-  "rest api",
-  "java",
-  "go",
-  "rust",
-  "c++",
-  "c#",
-  ".net"
-];
+import { HEURISTIC_SUMMARY_CHAR_LIMIT, HEURISTIC_TECH_LIMIT, TECH_KEYWORDS } from "../config/constants";
+import type { ParsedJobBatch } from "../types";
 
 // Matches common salary shapes: "$120,000", "$120k", "120k - 150k", "USD 90,000",
 // optionally followed by a period like "per year". Returns the first occurrence.
@@ -52,7 +26,7 @@ export const stripHtml = (html: string): string => {
 export const extractTechStack = (text: string): string[] => {
   const lower = text.toLowerCase();
   return TECH_KEYWORDS.filter((keyword) => lower.includes(keyword.toLowerCase()))
-    .slice(0, 12)
+    .slice(0, HEURISTIC_TECH_LIMIT)
     .map((keyword) => keyword.replace(/\b\w/g, (c) => c.toUpperCase()));
 };
 
@@ -61,7 +35,7 @@ export const fallbackSummary = (text: string): string => {
   if (!compressed) {
     return "No requirement summary available.";
   }
-  return compressed.slice(0, 550);
+  return compressed.slice(0, HEURISTIC_SUMMARY_CHAR_LIMIT);
 };
 
 export const extractSalary = (text: string): string | null => {

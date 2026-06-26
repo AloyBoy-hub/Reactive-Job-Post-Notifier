@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-import { getServiceSupabaseClient } from "../lib/db";
+import { DEFAULT_JOBS_LIMIT, MAX_JOBS_LIMIT } from "../lib/config/constants";
+import { getServiceSupabaseClient } from "../lib/db/db";
 import type { JobRecord, SourceType } from "../lib/types";
 
 const firstValue = (input: string | string[] | undefined): string => {
@@ -89,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse): 
 
     const supabase = getServiceSupabaseClient();
     const rawLimit = Number.parseInt(firstValue(req.query.limit), 10);
-    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 2000) : 500;
+    const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_JOBS_LIMIT) : DEFAULT_JOBS_LIMIT;
 
     const { data, error } = await supabase.rpc("search_jobs", {
       p_tech: toFilterParam(req.query.tech),

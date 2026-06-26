@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 
-import { serverEnv } from "./serverEnv";
+import { EMAIL_SUMMARY_CHAR_LIMIT } from "../config/constants";
+import { serverEnv } from "../config/serverEnv";
 
 export interface DigestJob {
   jobTitle: string;
@@ -46,7 +47,7 @@ const renderDigestHtml = (jobs: DigestJob[], trigger: "cron" | "manual"): string
           <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(job.jobTitle)}</td>
           <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(salary)}</td>
           <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(techStack)}</td>
-          <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(job.requirementsSummary.slice(0, 260))}</td>
+          <td style="padding:12px;border-bottom:1px solid #e5e7eb;">${escapeHtml(job.requirementsSummary.slice(0, EMAIL_SUMMARY_CHAR_LIMIT))}</td>
           <td style="padding:12px;border-bottom:1px solid #e5e7eb;">
             <a href="${escapeHtml(job.jobUrl)}" target="_blank" rel="noreferrer">Open Listing</a>
           </td>

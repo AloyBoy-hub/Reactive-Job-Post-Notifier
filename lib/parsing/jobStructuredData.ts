@@ -1,7 +1,8 @@
 import { load } from "cheerio";
 
+import { HEURISTIC_SUMMARY_CHAR_LIMIT, MAX_JOBS_PER_PAGE, MAX_TECH_STACK } from "../config/constants";
 import { extractTechStack, fallbackSummary, normalizeText, stripHtml } from "./parseHeuristics";
-import type { ParsedJob } from "./types";
+import type { ParsedJob } from "../types";
 
 // Walks a parsed JSON-LD value, returning every object node it contains,
 // descending into top-level arrays and `@graph` collections.
@@ -94,7 +95,7 @@ const readSkills = (obj: Record<string, unknown>, descriptionText: string): stri
   if (Array.isArray(raw)) {
     const items = raw.map((entry) => normalizeText(entry)).filter(Boolean);
     if (items.length > 0) {
-      return items.slice(0, 20);
+      return items.slice(0, MAX_TECH_STACK);
     }
   }
   if (typeof raw === "string" && raw.includes(",")) {
@@ -103,7 +104,7 @@ const readSkills = (obj: Record<string, unknown>, descriptionText: string): stri
       .map((entry) => normalizeText(entry))
       .filter(Boolean);
     if (items.length > 1) {
-      return items.slice(0, 20);
+      return items.slice(0, MAX_TECH_STACK);
     }
   }
   return extractTechStack(descriptionText);
@@ -135,7 +136,9 @@ const jobFromNode = (obj: Record<string, unknown>, sourceUrl: string): ParsedJob
     company_name: company,
     salary: readSalary(obj.baseSalary),
     tech_stack: readSkills(obj, `${descriptionText} ${title}`),
-    requirements_summary: descriptionText ? descriptionText.slice(0, 550) : fallbackSummary(title),
+    requirements_summary: descriptionText
+      ? descriptionText.slice(0, HEURISTIC_SUMMARY_CHAR_LIMIT)
+      : fallbackSummary(title),
     job_url: resolveUrl(obj.url, sourceUrl)
   };
 };
@@ -174,5 +177,5 @@ export const extractJobPostingsFromHtml = (html: string, sourceUrl: string): Par
     }
   });
 
-  return jobs.slice(0, 20);
+  return jobs.slice(0, MAX_JOBS_PER_PAGE);
 };

@@ -2,7 +2,7 @@ import chromium from "@sparticuz/chromium";
 import playwright from "playwright-core";
 
 import { cleanHtmlToText } from "./cleanText";
-import type { ScrapedDocument, SourceType } from "./types";
+import type { ScrapedDocument, SourceType } from "../types";
 
 const DEFAULT_HEADERS = {
   "User-Agent":

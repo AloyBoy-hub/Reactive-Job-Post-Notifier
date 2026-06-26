@@ -1,12 +1,13 @@
-import { getServiceSupabaseClient } from "./db";
-import { delay, normalizeDelay } from "./delay";
-import type { DigestJob } from "./email";
-import { sendDigestEmail } from "./email";
-import { createContentHash } from "./hash";
-import { parseJobsFromText } from "./parseJobWithLlm";
+import { MAX_TECH_STACK, PAGE_TEXT_CHAR_LIMIT, STORED_SUMMARY_CHAR_LIMIT } from "../config/constants";
+import { getServiceSupabaseClient } from "../db/db";
+import { delay, normalizeDelay } from "../util/delay";
+import type { DigestJob } from "../email/email";
+import { sendDigestEmail } from "../email/email";
+import { createContentHash } from "../util/hash";
+import { parseJobsFromText } from "../parsing/parseJobWithLlm";
 import { scrapeTrackedUrl } from "./scrape";
-import { serverEnv } from "./serverEnv";
-import type { JobRecord, ScrapeCycleResult, ScrapeFailure, ScrapeStatus, TrackedUrlRecord } from "./types";
+import { serverEnv } from "../config/serverEnv";
+import type { JobRecord, ScrapeCycleResult, ScrapeFailure, ScrapeStatus, TrackedUrlRecord } from "../types";
 
 const updateTrackedUrlStatus = async (id: string, status: ScrapeStatus): Promise<void> => {
   const supabase = getServiceSupabaseClient();
@@ -21,7 +22,7 @@ const updateTrackedUrlStatus = async (id: string, status: ScrapeStatus): Promise
 
 const normalizeSummary = (summary: string): string => {
   const cleaned = summary.replace(/\s+/g, " ").trim();
-  return cleaned.slice(0, 1200);
+  return cleaned.slice(0, STORED_SUMMARY_CHAR_LIMIT);
 };
 
 const getExistingJobId = async (contentHash: string): Promise<string | null> => {
@@ -62,10 +63,10 @@ const insertJobIfNew = async (
     job_title: parsedJob.job_title.trim(),
     company_name: parsedJob.company_name.trim(),
     salary: parsedJob.salary?.trim() || null,
-    tech_stack: parsedJob.tech_stack.slice(0, 20),
+    tech_stack: parsedJob.tech_stack.slice(0, MAX_TECH_STACK),
     requirements_summary: normalizeSummary(parsedJob.requirements_summary),
     job_url: jobUrl,
-    raw_text: rawText.slice(0, 14000),
+    raw_text: rawText.slice(0, PAGE_TEXT_CHAR_LIMIT),
     content_hash: contentHash
   };
 

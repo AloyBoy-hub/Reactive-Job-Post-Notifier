@@ -1,6 +1,8 @@
 import { load } from "cheerio";
 
-export const cleanHtmlToText = (html: string, maxCharacters = 14000): string => {
+import { PAGE_TEXT_CHAR_LIMIT } from "../config/constants";
+
+export const cleanHtmlToText = (html: string, maxCharacters = PAGE_TEXT_CHAR_LIMIT): string => {
   const $ = load(html);
 
   $("script, style, noscript, nav, footer, header, svg, iframe, form").remove();

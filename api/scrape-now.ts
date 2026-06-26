@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 
-import { runScrapeCycle } from "../lib/scrapePipeline";
+import { runScrapeCycle } from "../lib/scraping/scrapePipeline";
 
 export const config = {
   maxDuration: 60
