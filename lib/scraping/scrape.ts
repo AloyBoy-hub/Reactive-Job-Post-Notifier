@@ -23,79 +23,6 @@ const fetchWithTimeout = async (url: string, timeoutMs: number): Promise<Respons
   }
 };
 
-const bestPrefixLength = (rules: string[], path: string): number => {
-  let best = -1;
-  for (const rule of rules) {
-    if (!rule) {
-      continue;
-    }
-    if (path.startsWith(rule)) {
-      best = Math.max(best, rule.length);
-    }
-  }
-  return best;
-};
-
-const allowsByRobots = async (targetUrl: string): Promise<boolean> => {
-  const parsed = new URL(targetUrl);
-  const robotsUrl = `${parsed.origin}/robots.txt`;
-
-  try {
-    const response = await fetchWithTimeout(robotsUrl, 8000);
-    if (!response.ok) {
-      return true;
-    }
-
-    const text = await response.text();
-    const lines = text.split(/\r?\n/);
-    let wildcardSectionActive = false;
-    const disallowRules: string[] = [];
-    const allowRules: string[] = [];
-
-    for (const rawLine of lines) {
-      const line = rawLine.split("#")[0].trim();
-      if (!line) {
-        continue;
-      }
-
-      const [rawKey, ...rest] = line.split(":");
-      if (!rawKey || rest.length === 0) {
-        continue;
-      }
-
-      const key = rawKey.trim().toLowerCase();
-      const value = rest.join(":").trim();
-
-      if (key === "user-agent") {
-        wildcardSectionActive = value === "*";
-        continue;
-      }
-
-      if (!wildcardSectionActive) {
-        continue;
-      }
-
-      if (key === "disallow") {
-        disallowRules.push(value);
-      } else if (key === "allow") {
-        allowRules.push(value);
-      }
-    }
-
-    const path = parsed.pathname || "/";
-    const allowLength = bestPrefixLength(allowRules, path);
-    const disallowLength = bestPrefixLength(disallowRules, path);
-
-    if (disallowLength === -1) {
-      return true;
-    }
-
-    return allowLength >= disallowLength;
-  } catch {
-    return true;
-  }
-};
-
 const scrapeStaticPage = async (url: string): Promise<ScrapedDocument> => {
   const response = await fetchWithTimeout(url, 25000);
   if (!response.ok) {
@@ -148,24 +75,18 @@ const scrapeLinkedInPage = async (url: string): Promise<ScrapedDocument> => {
   }
 };
 
-const shouldUseBrowser = (url: string, sourceType: SourceType): boolean => {
-  // Public LinkedIn search pages (/jobs/search) work via static fetch and
-  // are parsed by the deterministic search-page parser.  Only fall back to
-  // Playwright for non-search LinkedIn pages (e.g. individual job views
-  // behind auth walls).
+const shouldUseBrowser = (url: string, _sourceType: SourceType): boolean => {
+  if (!/linkedin\.com/i.test(url)) {
+    return false;
+  }
+  // Public LinkedIn search pages work via static fetch.
   if (/linkedin\.com\/jobs\/search\b/i.test(url)) {
     return false;
   }
-  return sourceType === "linkedin" || /linkedin\.com/i.test(url);
+  return true;
 };
 
-// WARNING: do not bypass robots.txt restrictions or private/authenticated pages.
 export const scrapeTrackedUrl = async (url: string, sourceType: SourceType): Promise<ScrapedDocument> => {
-  const allowed = await allowsByRobots(url);
-  if (!allowed) {
-    throw new Error("Scrape skipped because robots.txt disallows this path for user-agent '*'");
-  }
-
   if (shouldUseBrowser(url, sourceType)) {
     return scrapeLinkedInPage(url);
   }
