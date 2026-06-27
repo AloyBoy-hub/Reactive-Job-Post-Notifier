@@ -5,6 +5,13 @@
 @tailwind utilities;
 
 :root {
+  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Dark theme (default) */
+[data-theme="dark"] {
   color-scheme: dark;
   --bg: #11151c;
   --surface: #161c26;
@@ -20,9 +27,27 @@
   --green: #58c08f;
   --red: #e08585;
   --amber: #d6b15f;
-  --display: "Space Grotesk", "Segoe UI", system-ui, sans-serif;
-  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --nav-bg: rgba(17, 21, 28, 0.82);
+}
+
+/* Light theme */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f8f9fb;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --inset: #f4f5f7;
+  --border: rgba(0, 0, 0, 0.08);
+  --border-2: rgba(0, 0, 0, 0.14);
+  --text: #1a1d24;
+  --muted: #5a6070;
+  --faint: #8b92a0;
+  --accent: #4a6cf7;
+  --accent-hover: #3d5de0;
+  --green: #2d9d6a;
+  --red: #d44545;
+  --amber: #b08c2e;
+  --nav-bg: rgba(248, 249, 251, 0.85);
 }
 
 * {
@@ -51,7 +76,7 @@ body {
 /* nav */
 .nav {
   border-bottom: 1px solid var(--border);
-  background: rgba(17, 21, 28, 0.82);
+  background: var(--nav-bg);
   backdrop-filter: blur(10px);
   position: sticky;
   top: 0;
@@ -96,6 +121,85 @@ body {
 .nav-links button.active {
   color: var(--text);
   background: var(--surface-2);
+}
+
+/* theme toggle */
+.theme-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid var(--border-2);
+  background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--muted);
+}
+.theme-toggle:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+/* collapsible error section */
+.error-section {
+  border: 1px solid rgba(224, 133, 133, 0.25);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  background: rgba(224, 133, 133, 0.06);
+  overflow: hidden;
+}
+.error-section > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--red);
+  list-style: none;
+}
+.error-section > summary::-webkit-details-marker {
+  display: none;
+}
+.error-section .err-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  background: rgba(224, 133, 133, 0.2);
+  padding: 2px 7px;
+  border-radius: 99px;
+}
+.error-section .err-caret {
+  margin-left: auto;
+  transition: transform 0.15s;
+  font-size: 11px;
+}
+.error-section[open] .err-caret {
+  transform: rotate(90deg);
+}
+.error-body {
+  padding: 0 14px 12px;
+}
+.error-item {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  padding: 6px 0;
+  border-top: 1px solid rgba(224, 133, 133, 0.12);
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.error-item .domain {
+  color: var(--red);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.error-item .msg {
+  color: var(--faint);
+  word-break: break-word;
 }
 
 /* buttons */
@@ -483,13 +587,19 @@ details.exp[open] .caret {
   gap: 9px;
   margin-bottom: 16px;
 }
+.jobs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
 .job {
   border: 1px solid var(--border);
-  border-radius: 13px;
-  padding: 18px;
-  margin-bottom: 12px;
+  border-radius: 12px;
+  padding: 14px 16px;
   background: var(--inset);
   transition: border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
 }
 .job--unseen {
   border-color: #22c55e;
@@ -497,11 +607,11 @@ details.exp[open] .caret {
 }
 .badge-new {
   display: inline-block;
-  margin-left: 8px;
-  padding: 2px 7px;
-  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
   font-weight: 700;
-  border-radius: 6px;
+  border-radius: 4px;
   background: #22c55e;
   color: #fff;
   vertical-align: middle;
@@ -510,25 +620,26 @@ details.exp[open] .caret {
 .job .jtop {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   align-items: start;
 }
 .job h3 {
   font-family: var(--display);
   margin: 0;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  line-height: 1.3;
 }
 .job .co {
   color: var(--accent);
-  font-size: 14px;
+  font-size: 12px;
   margin-top: 2px;
   font-weight: 500;
 }
 .job .when {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--faint);
   white-space: nowrap;
 }
@@ -536,44 +647,50 @@ details.exp[open] .caret {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 12px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 10px;
   flex-wrap: wrap;
 }
 .job .src {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 11px;
   color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 60%;
 }
 .link {
   color: var(--accent);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 /* JD + requirements */
 .jd {
-  margin-top: 14px;
+  margin-top: 8px;
 }
 .jd-label {
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.1em;
   color: var(--faint);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 .jd-text {
   margin: 0;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 12px;
+  line-height: 1.5;
   white-space: pre-line;
 }
 .jd-text.clamp {
   display: -webkit-box;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -591,27 +708,27 @@ details.exp[open] .caret {
 }
 ul.req {
   margin: 0;
-  padding-left: 18px;
+  padding-left: 16px;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 12px;
+  line-height: 1.5;
 }
 ul.req li {
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 ul.req li::marker {
   color: var(--accent);
 }
 .chips {
   display: flex;
-  gap: 6px;
+  gap: 4px;
   flex-wrap: wrap;
-  margin-top: 14px;
+  margin-top: 8px;
 }
 .chip {
   font-family: var(--mono);
-  font-size: 11px;
-  padding: 3px 9px;
+  font-size: 10px;
+  padding: 2px 7px;
   border-radius: 999px;
   background: var(--surface-2);
   color: var(--muted);
@@ -685,7 +802,8 @@ footer.foot {
   .status-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  .grid2 {
+  .grid2,
+  .jobs-grid {
     grid-template-columns: 1fr;
   }
 }

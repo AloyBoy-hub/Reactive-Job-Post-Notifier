@@ -3,7 +3,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { addTrackedUrl, deleteTrackedUrl, fetchJobs, fetchStatus, fetchTrackedUrls, triggerScrapeNow } from "./api";
 import type { Job, ScrapeResponse, SourceType, SystemStatus, TrackedUrl } from "./types";
 
-type Page = "dashboard" | "scrape";
+type Page = "dashboard" | "scrape" | "status";
 type JobView = "jobs" | "companies";
 
 interface Filters {
@@ -87,6 +87,25 @@ interface CompanyAgg {
 function App() {
   const [page, setPage] = useState<Page>("dashboard");
   const [view, setView] = useState<JobView>("jobs");
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    try {
+      return (localStorage.getItem("theme") as "dark" | "light") || "dark";
+    } catch {
+      return "dark";
+    }
+  });
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  };
+
+  // Set initial theme on mount
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, []);
 
   const [trackedUrls, setTrackedUrls] = useState<TrackedUrl[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -311,8 +330,6 @@ function App() {
     );
   };
 
-  const healthy = Boolean(status?.database);
-
   return (
     <>
       <header className="nav">
@@ -322,16 +339,18 @@ function App() {
           </div>
           <nav className="nav-links">
             <button className={page === "dashboard" ? "active" : ""} onClick={() => setPage("dashboard")}>
-              Dashboard
+              Jobs
             </button>
             <button className={page === "scrape" ? "active" : ""} onClick={() => setPage("scrape")}>
-              Scrape
+              Sources
+            </button>
+            <button className={page === "status" ? "active" : ""} onClick={() => setPage("status")}>
+              Status
             </button>
           </nav>
-          <span className={`tag ${healthy ? "ok" : ""}`}>
-            <span className={`dot ${healthy ? "" : "red"}`} />
-            {healthy ? "All systems go" : "Backend issue"}
-          </span>
+          <button type="button" className="theme-toggle" onClick={toggleTheme} title="Toggle theme">
+            {theme === "dark" ? "🌙" : "☀️"}
+          </button>
         </div>
       </header>
 
@@ -348,7 +367,25 @@ function App() {
               </div>
 
               {error ? <div className="notice err">{error}</div> : null}
-              {notice ? <div className="notice ok">{notice}</div> : null}
+              {notice && !lastRun?.failures?.length ? <div className="notice ok">{notice}</div> : null}
+
+              {lastRun?.failures && lastRun.failures.length > 0 ? (
+                <details className="error-section">
+                  <summary>
+                    <span>Scrape Errors</span>
+                    <span className="err-count">{lastRun.failures.length}</span>
+                    <span className="err-caret">▶</span>
+                  </summary>
+                  <div className="error-body">
+                    {lastRun.failures.map((f: { url: string; reason: string }, i: number) => (
+                      <div className="error-item" key={i}>
+                        <span className="domain">{new URL(f.url).hostname}</span>
+                        <span className="msg">{f.reason}</span>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
 
               <div className="stats">
                 <div className="stat">
@@ -409,7 +446,9 @@ function App() {
                     ) : filteredJobs.length === 0 ? (
                       <div className="empty">No jobs matched your filters yet.</div>
                     ) : (
-                      filteredJobs.map(renderJob)
+                      <div className="jobs-grid">
+                        {filteredJobs.map(renderJob)}
+                      </div>
                     )}
                   </>
                 ) : (
@@ -453,69 +492,16 @@ function App() {
               </div>
             </div>
           </section>
-        ) : (
+        ) : page === "scrape" ? (
           <section className="page">
             <div className="wrap">
               <div className="page-head" style={{ marginBottom: 22 }}>
-                <h1>Scrape</h1>
-                <p>System status, tracked sources, and manual runs.</p>
+                <h1>Sources</h1>
+                <p>Tracked sources and manual scrape runs.</p>
               </div>
 
               {error ? <div className="notice err">{error}</div> : null}
               {notice ? <div className="notice ok">{notice}</div> : null}
-
-              <div className="card" style={{ marginBottom: 18 }}>
-                <div className="toprow" style={{ marginBottom: 14 }}>
-                  <h2>System status</h2>
-                  <span className="hint">checked {formatDateTime(lastUpdatedAt || null)}</span>
-                </div>
-                <div className="status-grid">
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className={`dot ${status ? "" : "red"}`} />
-                      API
-                    </div>
-                    <div className="detail">{status ? `operational · ${statusLatency ?? "—"} ms` : "unreachable"}</div>
-                  </div>
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className={`dot ${status?.database ? "" : "red"}`} />
-                      Database
-                    </div>
-                    <div className="detail">{status?.database ? "Supabase · connected" : "disconnected"}</div>
-                  </div>
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className="dot" />
-                      Hourly cron
-                    </div>
-                    <div className="detail">GitHub Actions · hourly</div>
-                  </div>
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className="dot" />
-                      Last scrape
-                    </div>
-                    <div className="detail">{formatDateTime(status?.lastScrapeAt ?? null)}</div>
-                  </div>
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className="dot" />
-                      Parser
-                    </div>
-                    <div className="detail">
-                      {status?.openAiConfigured ? "OpenAI + JSON-LD" : "JSON-LD + heuristics"}
-                    </div>
-                  </div>
-                  <div className="status-tile">
-                    <div className="name">
-                      <span className={`dot ${status?.resendConfigured ? "" : "amber"}`} />
-                      Email digest
-                    </div>
-                    <div className="detail">{status?.resendConfigured ? "Resend · ready" : "not configured"}</div>
-                  </div>
-                </div>
-              </div>
 
               <div className="grid2">
                 <div className="card">
@@ -683,6 +669,68 @@ function App() {
                           </div>
                         ))
                     )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
+          <section className="page">
+            <div className="wrap">
+              <div className="page-head" style={{ marginBottom: 22 }}>
+                <h1>Status</h1>
+                <p>System health and connectivity.</p>
+              </div>
+
+              <div className="card">
+                <div className="toprow" style={{ marginBottom: 14 }}>
+                  <h2>System status</h2>
+                  <span className="hint">checked {formatDateTime(lastUpdatedAt || null)}</span>
+                </div>
+                <div className="status-grid">
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status ? "" : "red"}`} />
+                      API
+                    </div>
+                    <div className="detail">{status ? `operational · ${statusLatency ?? "—"} ms` : "unreachable"}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status?.database ? "" : "red"}`} />
+                      Database
+                    </div>
+                    <div className="detail">{status?.database ? "Supabase · connected" : "disconnected"}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Hourly cron
+                    </div>
+                    <div className="detail">GitHub Actions · hourly</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Last scrape
+                    </div>
+                    <div className="detail">{formatDateTime(status?.lastScrapeAt ?? null)}</div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className="dot" />
+                      Parser
+                    </div>
+                    <div className="detail">
+                      {status?.openAiConfigured ? "OpenAI + JSON-LD" : "JSON-LD + heuristics"}
+                    </div>
+                  </div>
+                  <div className="status-tile">
+                    <div className="name">
+                      <span className={`dot ${status?.resendConfigured ? "" : "amber"}`} />
+                      Email digest
+                    </div>
+                    <div className="detail">{status?.resendConfigured ? "Resend · ready" : "not configured"}</div>
                   </div>
                 </div>
               </div>
